@@ -1,7 +1,6 @@
-import { agents, links, metricSeries, modelConnections, requests } from "@/lib/mock-data";
-import type { Agent, AgentModelLink, ModelConnection, Provider } from "@/types/domain";
+import type { Agent, AgentModelLink, ModelConnection, Provider, RequestEvent, MetricPoint, Status } from "@/types/domain";
 
-const wait = (ms = 180) => new Promise((resolve) => setTimeout(resolve, ms));
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export type CreateModelConnectionInput = {
   provider: Provider;
@@ -19,75 +18,168 @@ export type CreateAgentInput = {
   tags: string;
 };
 
-export const api = {
-  async getDashboard() {
-    await wait();
-    const totalRequests = metricSeries.reduce((sum, point) => sum + point.requests, 0);
-    const totalInput = metricSeries.reduce((sum, point) => sum + point.inputTokens, 0);
-    const totalOutput = metricSeries.reduce((sum, point) => sum + point.outputTokens, 0);
-    const errors = metricSeries.reduce((sum, point) => sum + point.errors, 0);
+async function request(path: string, options?: RequestInit) {
+  const response = await fetch(`${BASE_URL}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(options?.headers || {}),
+    },
+  });
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.detail || `HTTP error ${response.status}`);
+  }
+  return response.json();
+}
 
+export const api = {
+  async getDashboard(): Promise<{
+    totals: {
+      agents: number;
+      modelTokens: number;
+      requestsToday: number;
+      tokensConsumed: number;
+      errors: number;
+      activeModels: number;
+    };
+    metricSeries: MetricPoint[];
+    recentRequests: RequestEvent[];
+  }> {
+    const data = await request("/v1/dashboard");
     return {
       totals: {
-        agents: agents.length,
-        modelTokens: modelConnections.length,
-        requestsToday: totalRequests,
-        tokensConsumed: totalInput + totalOutput,
-        errors,
-        activeModels: modelConnections.filter((model) => model.status === "active").length,
+        agents: data.totals.agents,
+        modelTokens: data.totals.model_tokens,
+        requestsToday: data.totals.requests_today,
+        tokensConsumed: data.totals.tokens_consumed,
+        errors: data.totals.errors,
+        activeModels: data.totals.active_models,
       },
-      metricSeries,
-      recentRequests: requests,
+      metricSeries: data.metric_series.map((point: any) => ({
+        time: point.time,
+        requests: point.requests,
+        inputTokens: point.input_tokens,
+        outputTokens: point.output_tokens,
+        latency: point.latency,
+        errors: point.errors,
+      })),
+      recentRequests: data.recent_requests.map((req: any) => ({
+        id: req.id,
+        timestamp: req.timestamp,
+        agentId: req.agent_id,
+        modelId: req.model,
+        endpoint: req.endpoint,
+        status: req.status,
+        latencyMs: req.latency_ms,
+        inputTokens: req.input_tokens,
+        outputTokens: req.output_tokens,
+        estimatedCost: req.estimated_cost,
+        errorMessage: req.error_message,
+      })),
     };
   },
-  async getModels() {
-    await wait();
-    return modelConnections;
+
+  async getModels(): Promise<ModelConnection[]> {
+    const list = await request("/v1/models");
+    return list.map((item: any) => ({
+      id: item.id,
+      provider: (item.provider.charAt(0).toUpperCase() + item.provider.slice(1)) as Provider,
+      modelName: item.model_name,
+      endpointUrl: item.endpoint_url,
+      status: item.status as Status,
+      createdAt: item.created_at,
+      usageCount: item.usage_count,
+      maskedToken: item.masked_key || "vz_live_...",
+      metadata: item.metadata || undefined,
+    }));
   },
+
   async createModelConnection(input: CreateModelConnectionInput): Promise<ModelConnection> {
-    await wait(500);
+    const res = await request("/v1/models", {
+      method: "POST",
+      body: JSON.stringify({
+        provider: input.provider.toLowerCase(),
+        model_name: input.modelName,
+        endpoint_url: input.endpointUrl,
+        sdk_type: `${input.provider.toLowerCase()}-sdk`,
+        metadata: input.metadata || "",
+      }),
+    });
     return {
-      id: `mt_${crypto.randomUUID().slice(0, 8)}`,
-      provider: input.provider,
-      modelName: input.modelName,
-      endpointUrl: input.endpointUrl,
-      status: "active",
-      createdAt: new Date().toISOString(),
-      usageCount: 0,
-      maskedToken: "vizhi_mt_new...once",
-      metadata: input.metadata,
+      id: res.id,
+      provider: (res.provider.charAt(0).toUpperCase() + res.provider.slice(1)) as Provider,
+      modelName: res.model_name,
+      endpointUrl: res.endpoint_url,
+      status: res.status as Status,
+      createdAt: res.created_at,
+      usageCount: res.usage_count,
+      maskedToken: res.masked_key || "vz_live_...",
+      metadata: res.metadata || undefined,
     };
   },
+
   async testConnection() {
-    await wait(650);
-    return { ok: true };
+    try {
+      const res = await fetch(`${BASE_URL}/`);
+      return { ok: res.ok };
+    } catch {
+      return { ok: false };
+    }
   },
-  async getAgents() {
-    await wait();
-    return agents;
+
+  async getAgents(): Promise<Agent[]> {
+    const list = await request("/v1/agents");
+    return list.map((item: any) => ({
+      id: item.id,
+      name: item.name,
+      description: item.description,
+      cid: item.agent_id,
+      owner: item.owner,
+      tags: item.tags || [],
+      status: item.status as Status,
+      createdAt: item.created_at,
+      maskedToken: item.masked_key,
+    }));
   },
+
   async createAgent(input: CreateAgentInput): Promise<Agent> {
-    await wait(420);
+    const res = await request("/v1/agents", {
+      method: "POST",
+      body: JSON.stringify({
+        name: input.name,
+        description: input.description,
+        cid: input.cid,
+        owner: input.owner,
+        tags: input.tags,
+      }),
+    });
     return {
-      id: `ag_${crypto.randomUUID().slice(0, 8)}`,
-      name: input.name,
-      description: input.description,
-      cid: input.cid,
-      owner: input.owner,
-      tags: input.tags.split(",").map((tag) => tag.trim()).filter(Boolean),
-      status: "active",
-      createdAt: new Date().toISOString(),
-      maskedToken: "vizhi_at_new...once",
+      id: res.agent.id,
+      name: res.agent.name,
+      description: res.agent.description,
+      cid: res.agent.agent_id,
+      owner: res.agent.owner,
+      tags: res.agent.tags || [],
+      status: res.agent.status as Status,
+      createdAt: res.agent.created_at,
+      maskedToken: res.api_key, // Provide full API key here on creation so user can copy it!
     };
   },
-  async getLinks() {
-    await wait();
-    return links;
+
+  async getLinks(): Promise<AgentModelLink[]> {
+    if (typeof window === "undefined") return [];
+    const local = localStorage.getItem("vizhi_links");
+    if (local) return JSON.parse(local);
+    const initial: AgentModelLink[] = [];
+    localStorage.setItem("vizhi_links", JSON.stringify(initial));
+    return initial;
   },
+
   async createLink(agentId: string, modelId: string): Promise<AgentModelLink> {
-    await wait(350);
-    return {
-      id: `ln_${crypto.randomUUID().slice(0, 5)}`,
+    const links = await this.getLinks();
+    const newLink: AgentModelLink = {
+      id: `ln_${Math.random().toString(36).substring(2, 7)}`,
       agentId,
       modelId,
       status: "active",
@@ -95,13 +187,57 @@ export const api = {
       requestCount: 0,
       tokenConsumption: 0,
     };
+    links.push(newLink);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("vizhi_links", JSON.stringify(links));
+    }
+    return newLink;
   },
-  async getMetrics() {
-    await wait();
-    return { metricSeries, requests };
+
+  async getMetrics(): Promise<{
+    metricSeries: MetricPoint[];
+    requests: RequestEvent[];
+  }> {
+    const data = await request("/v1/metrics");
+    return {
+      metricSeries: data.metric_series.map((point: any) => ({
+        time: point.time,
+        requests: point.requests,
+        inputTokens: point.input_tokens,
+        outputTokens: point.output_tokens,
+        latency: point.latency,
+        errors: point.errors,
+      })),
+      requests: data.requests.map((req: any) => ({
+        id: req.id,
+        timestamp: req.timestamp,
+        agentId: req.agent_id,
+        modelId: req.model,
+        endpoint: req.endpoint,
+        status: req.status,
+        latencyMs: req.latency_ms,
+        inputTokens: req.input_tokens,
+        outputTokens: req.output_tokens,
+        estimatedCost: req.estimated_cost,
+        errorMessage: req.error_message,
+      })),
+    };
   },
-  async getTrace(id: string) {
-    await wait();
-    return requests.find((request) => request.id === id) ?? requests[0];
+
+  async getTrace(id: string): Promise<RequestEvent> {
+    const req = await request(`/v1/queries/${id}`);
+    return {
+      id: req.id,
+      timestamp: req.timestamp,
+      agentId: req.agent_id,
+      modelId: req.model,
+      endpoint: req.endpoint,
+      status: req.status,
+      latencyMs: req.latency_ms,
+      inputTokens: req.input_tokens,
+      outputTokens: req.output_tokens,
+      estimatedCost: req.estimated_cost,
+      errorMessage: req.error_message,
+    };
   },
 };

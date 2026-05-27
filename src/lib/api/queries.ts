@@ -52,9 +52,9 @@ export function useCreateAgent() {
 
   return useMutation({
     mutationFn: (input: CreateAgentInput) => api.createAgent(input),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.agents });
-      toast.success("Agent token generated");
+      toast.success(`Agent token generated: ${data.maskedToken}`);
     },
   });
 }
