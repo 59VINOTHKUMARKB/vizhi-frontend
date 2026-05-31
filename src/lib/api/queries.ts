@@ -54,7 +54,7 @@ export function useCreateAgent() {
     mutationFn: (input: CreateAgentInput) => api.createAgent(input),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.agents });
-      toast.success(`Agent token generated: ${data.maskedToken}`);
+      toast.success(`Agent token generated: ${data.maskedKey}`);
     },
   });
 }
@@ -70,3 +70,20 @@ export function useCreateLink() {
     },
   });
 }
+
+export function useDeleteModel(){
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (modelId: string) => api.deleteModel(modelId),
+    onSuccess: async () => {
+      // Force immediate refetch of models list
+      await queryClient.refetchQueries({ queryKey: queryKeys.models });
+      toast.success("Model token deleted successfully");
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to delete model: ${error.message}`);
+    },
+  });
+}
+

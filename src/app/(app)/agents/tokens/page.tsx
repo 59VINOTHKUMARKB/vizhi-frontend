@@ -22,9 +22,9 @@ export default function AgentTokensPage() {
           <span className="font-mono text-xs" key="cid">{agent.cid}</span>,
           <StatusBadge key="status" status={agent.status} />,
           links.filter((link) => link.agentId === agent.id).length,
-          <span className="font-mono text-xs" key="token">{agent.maskedToken}</span>,
+          <span className="font-mono text-xs" key="token">{agent.maskedKey}</span>,
           <div className="flex gap-2" key="actions">
-            <CopyTokenButton token={agent.maskedToken} />
+            <CopyTokenButton token={agent.maskedKey} />
             <Button size="icon" title="Rotate token"><RefreshCcw className="h-4 w-4" /></Button>
             <Button size="icon" variant="danger" title="Delete token"><Trash2 className="h-4 w-4" /></Button>
           </div>,

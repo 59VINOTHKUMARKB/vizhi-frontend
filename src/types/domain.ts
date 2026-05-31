@@ -6,11 +6,10 @@ export type ModelConnection = {
   id: string;
   provider: Provider;
   modelName: string;
-  endpointUrl: string;
   status: Status;
   createdAt: string;
   usageCount: number;
-  maskedToken: string;
+  maskedKey: string;
   metadata?: string;
 };
 
@@ -23,7 +22,7 @@ export type Agent = {
   tags: string[];
   status: Status;
   createdAt: string;
-  maskedToken: string;
+  maskedKey: string;
 };
 
 export type AgentModelLink = {

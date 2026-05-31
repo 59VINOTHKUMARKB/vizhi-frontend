@@ -5,9 +5,19 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 export type CreateModelConnectionInput = {
   provider: Provider;
   modelName: string;
-  endpointUrl: string;
-  apiKey: string;
   metadata?: string;
+};
+
+export type ModelConnectionCreated = {
+  id: string;
+  provider: Provider;
+  modelName: string;
+  status: Status;
+  createdAt: string;
+  usageCount: number;
+  maskedKey: string;
+  metadata?: string;
+  apiKey: string;
 };
 
 export type CreateAgentInput = {
@@ -29,6 +39,10 @@ async function request(path: string, options?: RequestInit) {
   if (!response.ok) {
     const errData = await response.json().catch(() => ({}));
     throw new Error(errData.detail || `HTTP error ${response.status}`);
+  }
+  // Handle 204 No Content responses
+  if (response.status === 204) {
+    return null;
   }
   return response.json();
 }
@@ -86,47 +100,37 @@ export const api = {
       id: item.id,
       provider: (item.provider.charAt(0).toUpperCase() + item.provider.slice(1)) as Provider,
       modelName: item.model_name,
-      endpointUrl: item.endpoint_url,
       status: item.status as Status,
       createdAt: item.created_at,
       usageCount: item.usage_count,
-      maskedToken: item.masked_key || "vz_live_...",
+      maskedKey: item.masked_key || "vz_live_...",
       metadata: item.metadata || undefined,
     }));
   },
 
-  async createModelConnection(input: CreateModelConnectionInput): Promise<ModelConnection> {
+  async createModelConnection(input: CreateModelConnectionInput): Promise<ModelConnectionCreated> {
     const res = await request("/v1/models", {
       method: "POST",
       body: JSON.stringify({
         provider: input.provider.toLowerCase(),
         model_name: input.modelName,
-        endpoint_url: input.endpointUrl,
-        sdk_type: `${input.provider.toLowerCase()}-sdk`,
         metadata: input.metadata || "",
       }),
     });
     return {
-      id: res.id,
-      provider: (res.provider.charAt(0).toUpperCase() + res.provider.slice(1)) as Provider,
-      modelName: res.model_name,
-      endpointUrl: res.endpoint_url,
-      status: res.status as Status,
-      createdAt: res.created_at,
-      usageCount: res.usage_count,
-      maskedToken: res.masked_key || "vz_live_...",
-      metadata: res.metadata || undefined,
+      id: res.model_connection.id,
+      provider: (res.model_connection.provider.charAt(0).toUpperCase() + res.model_connection.provider.slice(1)) as Provider,
+      modelName: res.model_connection.model_name,
+      status: res.model_connection.status as Status,
+      createdAt: res.model_connection.created_at,
+      usageCount: res.model_connection.usage_count,
+      maskedKey: res.model_connection.masked_key || "vz_live_...",
+      metadata: res.model_connection.metadata || undefined,
+      apiKey: res.api_key,
     };
   },
 
-  async testConnection() {
-    try {
-      const res = await fetch(`${BASE_URL}/`);
-      return { ok: res.ok };
-    } catch {
-      return { ok: false };
-    }
-  },
+ 
 
   async getAgents(): Promise<Agent[]> {
     const list = await request("/v1/agents");
@@ -139,7 +143,7 @@ export const api = {
       tags: item.tags || [],
       status: item.status as Status,
       createdAt: item.created_at,
-      maskedToken: item.masked_key,
+      maskedKey: item.masked_key,
     }));
   },
 
@@ -163,7 +167,7 @@ export const api = {
       tags: res.agent.tags || [],
       status: res.agent.status as Status,
       createdAt: res.agent.created_at,
-      maskedToken: res.api_key, // Provide full API key here on creation so user can copy it!
+      maskedKey: res.api_key, // Provide full API key here on creation so user can copy it!
     };
   },
 
@@ -240,4 +244,13 @@ export const api = {
       errorMessage: req.error_message,
     };
   },
+
+  async deleteModel(modelId: string): Promise<void> {
+    await request(`/v1/models/${modelId}`, {
+      method: "DELETE",
+    });
+  },
 };
+
+
+ 
