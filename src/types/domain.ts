@@ -18,7 +18,6 @@ export type Agent = {
   name: string;
   description: string;
   cid: string;
-  owner: string;
   tags: string[];
   status: Status;
   createdAt: string;

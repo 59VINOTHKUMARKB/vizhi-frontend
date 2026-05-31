@@ -42,7 +42,7 @@ export function useCreateModelConnection() {
     mutationFn: (input: CreateModelConnectionInput) => api.createModelConnection(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.models });
-      toast.success("Model token generated");
+      toast.success(`Model token generated `);
     },
   });
 }
@@ -55,6 +55,9 @@ export function useCreateAgent() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.agents });
       toast.success(`Agent token generated: ${data.maskedKey}`);
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to create agent: ${error.message}`);
     },
   });
 }
@@ -87,3 +90,14 @@ export function useDeleteModel(){
   });
 }
 
+export function useDeleteAgent(){
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn  : (agentCID: string) => api.deleteAgent(agentCID),
+    onSuccess: async () => {
+      toast.success("Agent token deleted successfully");
+      await queryClient.refetchQueries({ queryKey: queryKeys.agents });
+    }
+  })
+}

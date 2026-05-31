@@ -6,12 +6,27 @@ import { CopyTokenButton } from "@/components/shared/copy-token-button";
 import { DataTable } from "@/components/shared/data-table";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { useAgents, useLinks } from "@/lib/api/queries";
+import { useAgents, useDeleteAgent, useLinks } from "@/lib/api/queries";
+import { useState } from "react";
 
 export default function AgentTokensPage() {
   const { data: agents = [] } = useAgents();
   const { data: links = [] } = useLinks();
+  const deleteAgent = useDeleteAgent();
+  const [deleteCID, setDeleteCID] = useState<string | null>(null);
+  const handleDelete = async (cid: string) => {
+    if (confirm("Are you sure you want to delete this agent token?")) {
+      setDeleteCID(cid);
 
+      try {
+        await deleteAgent.mutateAsync(cid);
+      }
+      finally{
+        setDeleteCID(null);
+      }
+    }
+  };
+  
   return (
     <>
       <PageHeader title="Agent Tokens" description="Monitoring identities for external applications. Use these tokens to attribute requests to an agent CID." />
@@ -26,7 +41,9 @@ export default function AgentTokensPage() {
           <div className="flex gap-2" key="actions">
             <CopyTokenButton token={agent.maskedKey} />
             <Button size="icon" title="Rotate token"><RefreshCcw className="h-4 w-4" /></Button>
-            <Button size="icon" variant="danger" title="Delete token"><Trash2 className="h-4 w-4" /></Button>
+            <Button size="icon" variant="danger" title="Delete token" disabled={deleteCID === agent.cid} onClick={() => handleDelete(agent.cid)}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
           </div>,
         ])}
       />

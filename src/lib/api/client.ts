@@ -23,8 +23,6 @@ export type ModelConnectionCreated = {
 export type CreateAgentInput = {
   name: string;
   description: string;
-  cid: string;
-  owner: string;
   tags: string;
 };
 
@@ -139,7 +137,6 @@ export const api = {
       name: item.name,
       description: item.description,
       cid: item.agent_id,
-      owner: item.owner,
       tags: item.tags || [],
       status: item.status as Status,
       createdAt: item.created_at,
@@ -153,8 +150,6 @@ export const api = {
       body: JSON.stringify({
         name: input.name,
         description: input.description,
-        cid: input.cid,
-        owner: input.owner,
         tags: input.tags,
       }),
     });
@@ -163,7 +158,6 @@ export const api = {
       name: res.agent.name,
       description: res.agent.description,
       cid: res.agent.agent_id,
-      owner: res.agent.owner,
       tags: res.agent.tags || [],
       status: res.agent.status as Status,
       createdAt: res.agent.created_at,
@@ -247,6 +241,12 @@ export const api = {
 
   async deleteModel(modelId: string): Promise<void> {
     await request(`/v1/models/${modelId}`, {
+      method: "DELETE",
+    });
+  },
+
+  async deleteAgent(agentCID: string): Promise<void> {
+    await request(`/v1/agents/${encodeURIComponent(agentCID)}`, {
       method: "DELETE",
     });
   },

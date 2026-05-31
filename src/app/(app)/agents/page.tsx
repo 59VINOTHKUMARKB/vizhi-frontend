@@ -1,5 +1,4 @@
 "use client";
-
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Archive, Bot, Edit, Trash2 } from "lucide-react";
@@ -15,8 +14,6 @@ import { useAgents, useCreateAgent } from "@/lib/api/queries";
 const schema = z.object({
   name: z.string().min(2, "Agent name is required"),
   description: z.string().min(8, "Description is required"),
-  cid: z.string().min(4, "CID is required"),
-  owner: z.string().min(2, "Owner is required"),
   tags: z.string().optional().default(""),
 });
 
@@ -26,15 +23,7 @@ export default function AgentsPage() {
   const [errors, setErrors] = useState<Partial<Record<keyof FormValues, string>>>({});
   const { data = [] } = useAgents();
   const createAgent = useCreateAgent();
-  const { register, handleSubmit } = useForm<FormValues>({
-    defaultValues: {
-      name: "ResearchAgent",
-      description: "Agent identity for production research workflows.",
-      cid: "research_agent_prod_01",
-      owner: "platform",
-      tags: "prod,research",
-    },
-  });
+  const { register, handleSubmit } = useForm<FormValues>();
 
   function submit(values: FormValues) {
     const parsed = schema.safeParse(values);
@@ -49,7 +38,7 @@ export default function AgentsPage() {
 
   return (
     <>
-      <PageHeader title="Agent Management" description="Create observable agent identities with stable CIDs, owners, tags, metadata, and lifecycle controls." />
+      <PageHeader title="Agent Management" description="Create observable agent identities with stable CIDs, tags, metadata, and lifecycle controls." />
       <div className="grid gap-6 xl:grid-cols-[420px_minmax(0,1fr)]">
         <Card>
           <CardHeader>
@@ -67,17 +56,7 @@ export default function AgentsPage() {
                 <Textarea {...register("description")} />
                 <FieldError message={errors.description} />
               </div>
-              <div className="space-y-2">
-                <Label>Agent CID</Label>
-                <Input {...register("cid")} />
-                <FieldError message={errors.cid} />
-              </div>
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label>Owner</Label>
-                  <Input {...register("owner")} />
-                  <FieldError message={errors.owner} />
-                </div>
                 <div className="space-y-2">
                   <Label>Tags</Label>
                   <Input {...register("tags")} />
@@ -91,16 +70,14 @@ export default function AgentsPage() {
           </CardContent>
         </Card>
         <DataTable
-          headers={["Agent", "CID", "Owner", "Tags", "Status", "Actions"]}
+          headers={["Agent", "CID", "Tags", "Status", "Actions"]}
           rows={data.map((agent) => [
             <div key="agent"><p className="font-medium">{agent.name}</p><p className="text-xs text-[var(--muted)]">{agent.description}</p></div>,
             <span className="font-mono text-xs" key="cid">{agent.cid}</span>,
-            agent.owner,
             agent.tags.join(", "),
             <StatusBadge key="status" status={agent.status} />,
             <div className="flex gap-2" key="actions">
               <Button size="icon" title="Edit"><Edit className="h-4 w-4" /></Button>
-              <Button size="icon" title="Archive"><Archive className="h-4 w-4" /></Button>
               <Button size="icon" variant="danger" title="Delete"><Trash2 className="h-4 w-4" /></Button>
             </div>,
           ])}

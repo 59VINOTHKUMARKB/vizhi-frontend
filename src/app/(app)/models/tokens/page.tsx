@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, RefreshCcw, Trash2 } from "lucide-react";
+import { Edit, Eye, RefreshCcw, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,7 @@ export default function ModelTokensPage() {
           formatNumber(model.usageCount),
           <span className="font-mono text-xs" key="token">{model.maskedKey}</span>,
           <div className="flex gap-2" key="actions"> 
+            <Button size="icon" title="Edit"><Edit className="h-4 w-4" /></Button>
             <Button size="icon" variant="danger" title="Delete token" onClick={() => handleDelete(model.id)}>
               <Trash2 className="h-4 w-4" />
             </Button>
