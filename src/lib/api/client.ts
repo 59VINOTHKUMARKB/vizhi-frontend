@@ -8,6 +8,7 @@ import type {
   MetricPoint,
   Status,
 } from "@/types/domain";
+import { clearSession, getAccessToken, type AuthSession } from "@/lib/auth";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -85,15 +86,20 @@ function displayProvider(provider: string): Provider {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = getAccessToken();
   const response = await fetch(`${BASE_URL}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options?.headers || {}),
     },
   });
   if (!response.ok) {
     const errData = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      clearSession();
+    }
     throw new Error(errData.detail || `HTTP error ${response.status}`);
   }
   // Handle 204 No Content responses
@@ -104,6 +110,31 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  async signup(input: { email: string; password: string; name?: string }): Promise<AuthSession> {
+    return request<AuthSession>("/v1/auth/signup", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+
+  async login(input: { email: string; password: string }): Promise<AuthSession> {
+    return request<AuthSession>("/v1/auth/login", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+
+  async loginWithGoogle(idToken: string): Promise<AuthSession> {
+    return request<AuthSession>("/v1/auth/google", {
+      method: "POST",
+      body: JSON.stringify({ id_token: idToken }),
+    });
+  },
+
+  async me(): Promise<AuthSession["user"]> {
+    return request<AuthSession["user"]>("/v1/auth/me");
+  },
+
   async getDashboard(): Promise<{
     totals: {
       agents: number;
