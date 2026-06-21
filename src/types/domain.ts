@@ -1,4 +1,15 @@
-export type Provider = "OpenAI" | "Anthropic" | "OpenRouter" | "Ollama" | "Custom";
+export type Provider = string;
+
+export type ModelCatalogItem = {
+  id: string;
+  label: string;
+};
+
+export type ProviderCatalogItem = {
+  id: string;
+  label: string;
+  models: ModelCatalogItem[];
+};
 
 export type Status = "active" | "disabled" | "error" | "testing" | "archived";
 

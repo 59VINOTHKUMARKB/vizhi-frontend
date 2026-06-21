@@ -1,4 +1,14 @@
-import type { Agent, AgentModelLink, ModelConnection, Provider, RequestEvent, MetricPoint, Status } from "@/types/domain";
+import type {
+  Agent,
+  AgentModelLink,
+  ModelConnection,
+  Provider,
+  ProviderCatalogItem,
+  RequestEvent,
+  MetricPoint,
+  Status,
+} from "@/types/domain";
+import { clearSession, getAccessToken, type AuthSession } from "@/lib/auth";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -26,26 +36,105 @@ export type CreateAgentInput = {
   tags: string;
 };
 
-async function request(path: string, options?: RequestInit) {
+type ApiMetricPoint = {
+  time: string;
+  requests: number;
+  input_tokens: number;
+  output_tokens: number;
+  latency: number;
+  errors: number;
+};
+
+type ApiRequestEvent = {
+  id: string;
+  timestamp: string;
+  agent_id: string;
+  model: string;
+  endpoint: string;
+  status: number;
+  latency_ms: number;
+  input_tokens: number;
+  output_tokens: number;
+  estimated_cost: number;
+  error_message?: string;
+};
+
+type ApiModelConnection = {
+  id: string;
+  provider: string;
+  model_name: string;
+  status: Status;
+  created_at: string;
+  usage_count: number;
+  masked_key?: string;
+  metadata?: string | null;
+};
+
+type ApiAgent = {
+  id: string;
+  name: string;
+  description: string;
+  agent_id: string;
+  tags?: string[];
+  status: Status;
+  created_at: string;
+  masked_key: string;
+};
+
+function displayProvider(provider: string): Provider {
+  return provider.charAt(0).toUpperCase() + provider.slice(1);
+}
+
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = getAccessToken();
   const response = await fetch(`${BASE_URL}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options?.headers || {}),
     },
   });
   if (!response.ok) {
     const errData = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      clearSession();
+    }
     throw new Error(errData.detail || `HTTP error ${response.status}`);
   }
   // Handle 204 No Content responses
   if (response.status === 204) {
-    return null;
+    return null as T;
   }
   return response.json();
 }
 
 export const api = {
+  async signup(input: { email: string; password: string; name?: string }): Promise<AuthSession> {
+    return request<AuthSession>("/v1/auth/signup", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+
+  async login(input: { email: string; password: string }): Promise<AuthSession> {
+    return request<AuthSession>("/v1/auth/login", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+
+  async loginWithGoogle(idToken: string): Promise<AuthSession> {
+    return request<AuthSession>("/v1/auth/google", {
+      method: "POST",
+      body: JSON.stringify({ id_token: idToken }),
+    });
+  },
+
+  async me(): Promise<AuthSession["user"]> {
+    return request<AuthSession["user"]>("/v1/auth/me");
+  },
+
   async getDashboard(): Promise<{
     totals: {
       agents: number;
@@ -58,7 +147,18 @@ export const api = {
     metricSeries: MetricPoint[];
     recentRequests: RequestEvent[];
   }> {
-    const data = await request("/v1/dashboard");
+    const data = await request<{
+      totals: {
+        agents: number;
+        model_tokens: number;
+        requests_today: number;
+        tokens_consumed: number;
+        errors: number;
+        active_models: number;
+      };
+      metric_series: ApiMetricPoint[];
+      recent_requests: ApiRequestEvent[];
+    }>("/v1/dashboard");
     return {
       totals: {
         agents: data.totals.agents,
@@ -68,7 +168,7 @@ export const api = {
         errors: data.totals.errors,
         activeModels: data.totals.active_models,
       },
-      metricSeries: data.metric_series.map((point: any) => ({
+      metricSeries: data.metric_series.map((point) => ({
         time: point.time,
         requests: point.requests,
         inputTokens: point.input_tokens,
@@ -76,7 +176,7 @@ export const api = {
         latency: point.latency,
         errors: point.errors,
       })),
-      recentRequests: data.recent_requests.map((req: any) => ({
+      recentRequests: data.recent_requests.map((req) => ({
         id: req.id,
         timestamp: req.timestamp,
         agentId: req.agent_id,
@@ -93,10 +193,10 @@ export const api = {
   },
 
   async getModels(): Promise<ModelConnection[]> {
-    const list = await request("/v1/models");
-    return list.map((item: any) => ({
+    const list = await request<ApiModelConnection[]>("/v1/models");
+    return list.map((item) => ({
       id: item.id,
-      provider: (item.provider.charAt(0).toUpperCase() + item.provider.slice(1)) as Provider,
+      provider: displayProvider(item.provider),
       modelName: item.model_name,
       status: item.status as Status,
       createdAt: item.created_at,
@@ -106,8 +206,15 @@ export const api = {
     }));
   },
 
+  async getModelCatalog(): Promise<ProviderCatalogItem[]> {
+    return request<ProviderCatalogItem[]>("/v1/models/registry");
+  },
+
   async createModelConnection(input: CreateModelConnectionInput): Promise<ModelConnectionCreated> {
-    const res = await request("/v1/models", {
+    const res = await request<{
+      model_connection: ApiModelConnection;
+      api_key: string;
+    }>("/v1/models", {
       method: "POST",
       body: JSON.stringify({
         provider: input.provider.toLowerCase(),
@@ -117,7 +224,7 @@ export const api = {
     });
     return {
       id: res.model_connection.id,
-      provider: (res.model_connection.provider.charAt(0).toUpperCase() + res.model_connection.provider.slice(1)) as Provider,
+      provider: displayProvider(res.model_connection.provider),
       modelName: res.model_connection.model_name,
       status: res.model_connection.status as Status,
       createdAt: res.model_connection.created_at,
@@ -131,8 +238,8 @@ export const api = {
  
 
   async getAgents(): Promise<Agent[]> {
-    const list = await request("/v1/agents");
-    return list.map((item: any) => ({
+    const list = await request<ApiAgent[]>("/v1/agents");
+    return list.map((item) => ({
       id: item.id,
       name: item.name,
       description: item.description,
@@ -145,7 +252,10 @@ export const api = {
   },
 
   async createAgent(input: CreateAgentInput): Promise<Agent> {
-    const res = await request("/v1/agents", {
+    const res = await request<{
+      agent: ApiAgent;
+      api_key: string;
+    }>("/v1/agents", {
       method: "POST",
       body: JSON.stringify({
         name: input.name,
@@ -196,9 +306,12 @@ export const api = {
     metricSeries: MetricPoint[];
     requests: RequestEvent[];
   }> {
-    const data = await request("/v1/metrics");
+    const data = await request<{
+      metric_series: ApiMetricPoint[];
+      requests: ApiRequestEvent[];
+    }>("/v1/metrics");
     return {
-      metricSeries: data.metric_series.map((point: any) => ({
+      metricSeries: data.metric_series.map((point) => ({
         time: point.time,
         requests: point.requests,
         inputTokens: point.input_tokens,
@@ -206,7 +319,7 @@ export const api = {
         latency: point.latency,
         errors: point.errors,
       })),
-      requests: data.requests.map((req: any) => ({
+      requests: data.requests.map((req) => ({
         id: req.id,
         timestamp: req.timestamp,
         agentId: req.agent_id,
@@ -223,7 +336,7 @@ export const api = {
   },
 
   async getTrace(id: string): Promise<RequestEvent> {
-    const req = await request(`/v1/queries/${id}`);
+    const req = await request<ApiRequestEvent>(`/v1/queries/${id}`);
     return {
       id: req.id,
       timestamp: req.timestamp,

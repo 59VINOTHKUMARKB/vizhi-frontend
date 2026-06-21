@@ -1,17 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useEffect, useMemo, useState } from "react";
+import { useForm, useWatch } from "react-hook-form";
 import { CheckCircle, KeyRound } from "lucide-react";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FieldError, Label, Select, Textarea } from "@/components/ui/field";
 import { PageHeader } from "@/components/shared/page-header";
-import { useCreateModelConnection } from "@/lib/api/queries";
+import { useCreateModelConnection, useModelCatalog } from "@/lib/api/queries";
 
 const schema = z.object({
-  provider: z.enum(["OpenAI", "Anthropic", "OpenRouter", "Ollama", "Custom"]),
+  provider: z.string().min(1, "Provider is required"),
   modelName: z.string().min(2, "Model name is required"),
   metadata: z.string().optional(),
 });
@@ -22,37 +22,41 @@ export default function ConnectModelPage() {
   const [errors, setErrors] = useState<Partial<Record<keyof FormValues, string>>>({});
   const [generatedToken, setGeneratedToken] = useState<string | null>(null);
   const createModel = useCreateModelConnection();
-  const { register, handleSubmit, watch } = useForm<FormValues>();
+  const modelCatalog = useModelCatalog();
+  const { register, control, handleSubmit, setValue } = useForm<FormValues>({
+    defaultValues: {
+      provider: "",
+      modelName: "",
+      metadata: "",
+    },
+  });
 
-  const MODELS_BY_PROVIDER = {
-  OpenAI: [
-    "gpt-4.1",
-    "gpt-4o",
-    "gpt-4o-mini",
-  ],
+  const selectedProvider = useWatch({ control, name: "provider" });
+  const providers = useMemo(() => modelCatalog.data ?? [], [modelCatalog.data]);
+  const activeProvider = providers.find((provider) => provider.id === selectedProvider);
+  const availableModels = activeProvider?.models ?? [];
+  const catalogError = modelCatalog.error instanceof Error
+    ? modelCatalog.error.message
+    : undefined;
 
-  Anthropic: [
-    "claude-opus-4",
-    "claude-sonnet-4",
-  ],
+  useEffect(() => {
+    if (!providers.length || selectedProvider) {
+      return;
+    }
 
-  OpenRouter: [
-    "openai/gpt-4o",
-    "anthropic/claude-sonnet-4",
-  ],
+    setValue("provider", providers[0].id);
+  }, [providers, selectedProvider, setValue]);
 
-  Ollama: [
-    "llama3",
-    "mistral",
-    "deepseek-r1",
-  ],
+  useEffect(() => {
+    const nextModels = providers.find((provider) => provider.id === selectedProvider)?.models ?? [];
+    if (!nextModels.length) {
+      setValue("modelName", "");
+      return;
+    }
 
-  Custom: [],
- };
+    setValue("modelName", nextModels[0].id);
+  }, [providers, selectedProvider, setValue]);
 
- const selectedProvider = watch("provider");
-
- const availableModels = MODELS_BY_PROVIDER[selectedProvider] || [];
   function submit(values: FormValues) {
     const parsed = schema.safeParse(values);
     if (!parsed.success) {
@@ -79,18 +83,24 @@ export default function ConnectModelPage() {
           <CardContent className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label>Provider</Label>
-              <Select {...register("provider")}>
-                <option>OpenAI</option>
-                <option>Anthropic</option>
-                <option>OpenRouter</option>
-                <option>Ollama</option>
-                <option>Custom</option>
+              <Select {...register("provider")} disabled={modelCatalog.isLoading}>
+                {modelCatalog.isLoading ? <option>Loading providers...</option> : null}
+                {!modelCatalog.isLoading && !providers.length ? <option>No providers available</option> : null}
+                {providers.map((provider) => (
+                  <option key={provider.id} value={provider.id}>
+                    {provider.label}
+                  </option>
+                ))}
               </Select>
+              <FieldError message={errors.provider} />
+              <FieldError message={catalogError ? `Could not load providers: ${catalogError}` : undefined} />
             </div>
             <div className="space-y-2">
               <Label>Model Name</Label>
-               <Select {...register("modelName")}>
-               {availableModels.map((model)=> <option key={model} value={model}>{model}</option>)}
+               <Select {...register("modelName")} disabled={modelCatalog.isLoading || !availableModels.length}>
+               {modelCatalog.isLoading ? <option>Loading models...</option> : null}
+               {!modelCatalog.isLoading && !availableModels.length ? <option>No models available</option> : null}
+               {availableModels.map((model)=> <option key={model.id} value={model.id}>{model.label}</option>)}
                </Select>
               <FieldError message={errors.modelName} />
             </div>
@@ -99,7 +109,7 @@ export default function ConnectModelPage() {
               <Textarea {...register("metadata")} />
             </div>
             <div className="flex flex-wrap gap-2 md:col-span-2">
-              <Button type="submit" variant="primary" disabled={createModel.isPending}>
+              <Button type="submit" variant="primary" disabled={createModel.isPending || modelCatalog.isLoading || !availableModels.length}>
                 <KeyRound className="h-4 w-4" />
                 Generate Model Token
               </Button>

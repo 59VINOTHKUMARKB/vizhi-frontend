@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   Activity,
   Bot,
@@ -15,6 +16,7 @@ import {
   Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { clearSession, getStoredUser, isAuthenticated, type AuthUser } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -29,6 +31,20 @@ const navItems = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [user] = useState<AuthUser | null>(() => getStoredUser());
+
+  useEffect(() => {
+    if (!isAuthenticated()) {
+      router.replace("/login");
+      return;
+    }
+  }, [router]);
+
+  function logout() {
+    clearSession();
+    router.replace("/login");
+  }
 
   return (
     <div className="min-h-screen">
@@ -71,10 +87,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <span className="truncate">Search agents, model tokens, CIDs, request IDs</span>
             </div>
             <div className="flex items-center gap-2">
+              {user ? (
+                <span className="hidden max-w-52 truncate text-xs text-[var(--muted)] sm:block">
+                  {user.email}
+                </span>
+              ) : null}
               <Button variant="secondary" size="sm">
                 <Link href="/monitoring">Live</Link>
               </Button>
-              <Button variant="ghost" size="icon" title="Logout">
+              <Button variant="ghost" size="icon" title="Logout" onClick={logout}>
                 <LogOut className="h-4 w-4" />
               </Button>
             </div>

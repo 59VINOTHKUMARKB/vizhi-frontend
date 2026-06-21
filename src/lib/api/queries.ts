@@ -4,6 +4,7 @@ import { api, type CreateAgentInput, type CreateModelConnectionInput } from "@/l
 
 export const queryKeys = {
   dashboard: ["dashboard"],
+  modelCatalog: ["modelCatalog"],
   models: ["models"],
   agents: ["agents"],
   links: ["links"],
@@ -17,6 +18,10 @@ export function useDashboard() {
 
 export function useModels() {
   return useQuery({ queryKey: queryKeys.models, queryFn: api.getModels });
+}
+
+export function useModelCatalog() {
+  return useQuery({ queryKey: queryKeys.modelCatalog, queryFn: api.getModelCatalog });
 }
 
 export function useAgents() {
