@@ -8,7 +8,7 @@ import type {
   MetricPoint,
   Status,
 } from "@/types/domain";
-import { clearSession, getAccessToken, type AuthSession } from "@/lib/auth";
+import { clearSession, type AuthSession } from "@/lib/auth";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -86,12 +86,11 @@ function displayProvider(provider: string): Provider {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const token = getAccessToken();
   const response = await fetch(`${BASE_URL}${path}`, {
+    credentials: "include",
     ...options,
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options?.headers || {}),
     },
   });
@@ -129,6 +128,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ id_token: idToken }),
     });
+  },
+
+  async logout(): Promise<void> {
+    await request<void>("/v1/auth/logout", { method: "POST" });
   },
 
   async me(): Promise<AuthSession["user"]> {

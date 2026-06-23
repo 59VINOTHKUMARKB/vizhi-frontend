@@ -2,10 +2,10 @@
 
 import Script from "next/script";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { Eye, Mail, Radar } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Eye, Radar } from "lucide-react";
 import { api } from "@/lib/api/client";
-import { saveSession } from "@/lib/auth";
+import { setCurrentUser } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FieldError, Input, Label } from "@/components/ui/field";
@@ -19,7 +19,7 @@ declare global {
             client_id: string;
             callback: (response: { credential?: string }) => void;
           }) => void;
-          prompt: () => void;
+          renderButton: (element: HTMLElement, options?: object) => void;
         };
       };
     };
@@ -36,7 +36,9 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [googleReady, setGoogleReady] = useState(false);
+
+  const googleButtonRef = useRef<HTMLDivElement>(null);
+  const googleInitialized = useRef(false);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -47,7 +49,7 @@ export default function LoginPage() {
         mode === "signup"
           ? await api.signup({ email, password, name })
           : await api.login({ email, password });
-      saveSession(session);
+      setCurrentUser(session.user);
       router.replace("/dashboard");
     } catch (exc) {
       setError(exc instanceof Error ? exc.message : "Authentication failed");
@@ -56,46 +58,61 @@ export default function LoginPage() {
     }
   }
 
-  function initializeGoogle() {
-    if (!googleClientId || !window.google) return;
-    window.google.accounts.id.initialize({
-      client_id: googleClientId,
-      callback: async (response) => {
-        if (!response.credential) {
-          setError("Google did not return an identity token");
-          return;
-        }
-        setError("");
-        setLoading(true);
-        try {
-          const session = await api.loginWithGoogle(response.credential);
-          saveSession(session);
-          router.replace("/dashboard");
-        } catch (exc) {
-          setError(exc instanceof Error ? exc.message : "Google login failed");
-        } finally {
-          setLoading(false);
-        }
-      },
-    });
-    setGoogleReady(true);
-  }
+  const handleGoogleCredential = useCallback(
+    async (response: { credential?: string }) => {
+      if (!response.credential) {
+        setError("Google did not return an identity token");
+        return;
+      }
+      setError("");
+      setLoading(true);
+      try {
+        const session = await api.loginWithGoogle(response.credential);
+        setCurrentUser(session.user);
+        router.replace("/dashboard");
+      } catch (exc) {
+        setError(exc instanceof Error ? exc.message : "Google login failed");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [router]
+  );
 
-  function startGoogleLogin() {
-    if (!googleClientId) {
-      setError("Set NEXT_PUBLIC_GOOGLE_CLIENT_ID to enable Google login");
-      return;
+  const initializeGoogle = useCallback(() => {
+    if (googleInitialized.current) return;
+    if (!googleClientId || !window.google || !googleButtonRef.current) return;
+
+    try {
+      window.google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: handleGoogleCredential,
+      });
+      window.google.accounts.id.renderButton(googleButtonRef.current, {
+        theme: "filled_black",
+        size: "large",
+        width: 360,
+      });
+      googleInitialized.current = true;
+    } catch (err) {
+      console.error("Google initialization failed", err);
+      setError("Google login initialization failed");
     }
-    if (!window.google || !googleReady) {
-      setError("Google login is still loading");
-      return;
+  }, [handleGoogleCredential]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.google) {
+      initializeGoogle();
     }
-    window.google.accounts.id.prompt();
-  }
+  }, [initializeGoogle]);
 
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-10">
-      <Script src="https://accounts.google.com/gsi/client" strategy="afterInteractive" onLoad={initializeGoogle} />
+      <Script
+        src="https://accounts.google.com/gsi/client"
+        strategy="afterInteractive"
+        onLoad={initializeGoogle}
+      />
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-4">
           <div className="flex items-center gap-3">
@@ -146,11 +163,14 @@ export default function LoginPage() {
               {loading ? "Working..." : mode === "signup" ? "Create Account" : "Login"}
             </Button>
           </form>
-          <div className="my-5 h-px bg-white/10" />
-          <Button className="w-full" type="button" onClick={startGoogleLogin} disabled={loading}>
-            <Mail className="h-4 w-4" />
-            Google
-          </Button>
+          <div className="my-6 flex items-center gap-3">
+            <div className="flex-1 h-px bg-white/10" />
+            <span className="text-xs text-[var(--muted)] font-medium">OR</span>
+            <div className="flex-1 h-px bg-white/10" />
+          </div>
+          <div className="flex justify-center">
+            <div ref={googleButtonRef} />
+          </div>
           <button
             type="button"
             className="mt-5 block w-full text-center text-sm text-[var(--muted)] transition hover:text-white"
