@@ -10,7 +10,7 @@ import type {
 } from "@/types/domain";
 import { clearSession, type AuthSession } from "@/lib/auth";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
 export type CreateModelConnectionInput = {
   provider: Provider;
