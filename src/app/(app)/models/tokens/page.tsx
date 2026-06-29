@@ -29,7 +29,7 @@ export default function ModelTokensPage() {
     <>
       <PageHeader
         title="Model Tokens"
-        description="Reusable model access tokens. Raw provider secrets stay backend-owned and are never displayed after generation."
+        description="Reusable model access tokens. Full tokens are shown only once at creation—copy them immediately. Only masked versions are stored and displayed here."
         action={<Button variant="primary"><Link href="/models/connect">Connect Model</Link></Button>}
       />
       <DataTable
@@ -40,7 +40,10 @@ export default function ModelTokensPage() {
           new Date(model.createdAt).toLocaleDateString(),
           <StatusBadge key="status" status={model.status} />,
           formatNumber(model.usageCount),
-          <span className="font-mono text-xs" key="token">{model.maskedKey}</span>,
+          <div className="flex items-center gap-2" key="token">
+            <span className="font-mono text-xs" title="Full token only shown once at creation">{model.maskedKey}</span>
+            <span className="text-xs text-[var(--muted)]">(Masked)</span>
+          </div>,
           <div className="flex gap-2" key="actions"> 
             <Button size="icon" title="Edit"><Edit className="h-4 w-4" /></Button>
             <Button size="icon" variant="danger" title="Delete token" onClick={() => handleDelete(model.id)}>

@@ -29,7 +29,7 @@ export default function AgentTokensPage() {
   
   return (
     <>
-      <PageHeader title="Agent Tokens" description="Monitoring identities for external applications. Use these tokens to attribute requests to an agent CID." />
+      <PageHeader title="Agent Tokens" description="Monitoring identities for external applications. Full tokens are shown only once at creation—copy them immediately. Only masked versions are displayed here." />
       <DataTable
         headers={["Agent", "CID", "Token Status", "Linked Models", "Agent Token", "Actions"]}
         rows={agents.map((agent) => [
@@ -37,9 +37,11 @@ export default function AgentTokensPage() {
           <span className="font-mono text-xs" key="cid">{agent.cid}</span>,
           <StatusBadge key="status" status={agent.status} />,
           links.filter((link) => link.agentId === agent.id).length,
-          <span className="font-mono text-xs" key="token">{agent.maskedKey}</span>,
+          <div className="flex items-center gap-2" key="token">
+            <span className="font-mono text-xs" title="Full token only shown once at creation">{agent.maskedKey}</span>
+            <span className="text-xs text-[var(--muted)]">(Masked)</span>
+          </div>,
           <div className="flex gap-2" key="actions">
-            <CopyTokenButton token={agent.maskedKey} />
             <Button size="icon" title="Rotate token"><RefreshCcw className="h-4 w-4" /></Button>
             <Button size="icon" variant="danger" title="Delete token" disabled={deleteCID === agent.cid} onClick={() => handleDelete(agent.cid)}>
               <Trash2 className="h-4 w-4" />
