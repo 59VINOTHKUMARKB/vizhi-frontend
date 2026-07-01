@@ -28,11 +28,13 @@ export type Agent = {
   id: string;
   name: string;
   description: string;
+  tokenName?: string;
   cid: string;
   tags: string[];
-  status: Status;
-  createdAt: string;
+  status: Status | "revoked";
   maskedKey: string;
+  lastUsedAt?: string;
+  createdAt: string;
 };
 
 export type AgentModelLink = {
