@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api, type CreateAgentInput, type CreateModelConnectionInput } from "@/lib/api/client";
-import type { Agent } from "@/types/domain";
+import type { Agent, ModelConnection } from "@/types/domain";
 
 export const queryKeys = {
   dashboard: ["dashboard"],
@@ -33,8 +33,12 @@ export function useLinks() {
   return useQuery({ queryKey: queryKeys.links, queryFn: api.getLinks });
 }
 
-export function useMetrics() {
-  return useQuery({ queryKey: queryKeys.metrics, queryFn: api.getMetrics, refetchInterval: 15_000 });
+export function useMetrics(params?: { timeRange?: string; agentId?: string; modelId?: string }) {
+  return useQuery({
+    queryKey: [...queryKeys.metrics, params?.timeRange ?? "24h", params?.agentId ?? "all", params?.modelId ?? "all"],
+    queryFn: () => api.getMetrics(params),
+    refetchInterval: 15_000,
+  });
 }
 
 export function useTrace(id: string) {
@@ -131,6 +135,36 @@ export function useRotateAgent() {
     mutationFn: (agentCID: string) => api.rotateAgent(agentCID),
     onSuccess: async () => {
       await queryClient.refetchQueries({ queryKey: queryKeys.agents });
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to rotate token: ${error.message}`);
+    },
+  });
+}
+
+export function useRevokeModel() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (modelId: string) => api.revokeModel(modelId),
+    onSuccess: async (data: ModelConnection) => {
+      const label = data.tokenName || data.modelName;
+      toast.success(`Token "${label}" revoked — it can no longer authenticate.`);
+      await queryClient.refetchQueries({ queryKey: queryKeys.models });
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to revoke token: ${error.message}`);
+    },
+  });
+}
+
+export function useRotateModel() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (modelId: string) => api.rotateModel(modelId),
+    onSuccess: async () => {
+      await queryClient.refetchQueries({ queryKey: queryKeys.models });
     },
     onError: (error: Error) => {
       toast.error(`Failed to rotate token: ${error.message}`);

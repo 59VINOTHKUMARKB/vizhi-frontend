@@ -15,20 +15,11 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 export type CreateModelConnectionInput = {
   provider: Provider;
   modelName: string;
+  tokenName?: string;
   metadata?: string;
 };
 
-export type ModelConnectionCreated = {
-  id: string;
-  provider: Provider;
-  modelName: string;
-  status: Status;
-  createdAt: string;
-  usageCount: number;
-  maskedKey: string;
-  metadata?: string;
-  apiKey: string;
-};
+export type ModelConnectionCreated = ModelConnection & { apiKey: string };
 
 export type CreateAgentInput = {
   name: string;
@@ -60,17 +51,26 @@ type ApiRequestEvent = {
   output_tokens: number;
   estimated_cost: number;
   error_message?: string;
+  prompt?: Array<{ role: string; content: string }>;
+  response_text?: string;
 };
 
 type ApiModelConnection = {
   id: string;
   provider: string;
   model_name: string;
-  status: Status;
+  token_name?: string | null;
+  status: string;
   created_at: string;
   usage_count: number;
   masked_key?: string;
+  last_used_at?: string | null;
   metadata?: string | null;
+};
+
+type ApiModelConnectionCreated = {
+  model_connection: ApiModelConnection;
+  api_key: string;
 };
 
 type ApiAgent = {
@@ -211,10 +211,12 @@ export const api = {
       id: item.id,
       provider: displayProvider(item.provider),
       modelName: item.model_name,
-      status: item.status as Status,
+      tokenName: item.token_name ?? undefined,
+      status: (item.status as ModelConnection["status"]),
       createdAt: item.created_at,
       usageCount: item.usage_count,
       maskedKey: item.masked_key || "vz_live_...",
+      lastUsedAt: item.last_used_at ?? undefined,
       metadata: item.metadata || undefined,
     }));
   },
@@ -232,6 +234,7 @@ export const api = {
       body: JSON.stringify({
         provider: input.provider.toLowerCase(),
         model_name: input.modelName,
+        token_name: input.tokenName || null,
         metadata: input.metadata || "",
       }),
     });
@@ -357,14 +360,23 @@ export const api = {
     return newLink;
   },
 
-  async getMetrics(): Promise<{
+  async getMetrics(params?: {
+    timeRange?: string;
+    agentId?: string;
+    modelId?: string;
+  }): Promise<{
     metricSeries: MetricPoint[];
     requests: RequestEvent[];
   }> {
+    const searchParams = new URLSearchParams();
+    if (params?.timeRange) searchParams.set("time_range", params.timeRange);
+    if (params?.agentId && params.agentId !== "all") searchParams.set("agent_id", params.agentId);
+    if (params?.modelId && params.modelId !== "all") searchParams.set("model_id", params.modelId);
+    const qs = searchParams.toString();
     const data = await request<{
       metric_series: ApiMetricPoint[];
       requests: ApiRequestEvent[];
-    }>("/v1/metrics");
+    }>(`/v1/metrics${qs ? `?${qs}` : ""}`);
     return {
       metricSeries: data.metric_series.map((point) => ({
         time: point.time,
@@ -386,6 +398,8 @@ export const api = {
         outputTokens: req.output_tokens,
         estimatedCost: req.estimated_cost,
         errorMessage: req.error_message,
+        prompt: req.prompt ?? [],
+        responseText: req.response_text ?? "",
       })),
     };
   },
@@ -404,6 +418,45 @@ export const api = {
       outputTokens: req.output_tokens,
       estimatedCost: req.estimated_cost,
       errorMessage: req.error_message,
+    };
+  },
+
+  async revokeModel(modelId: string): Promise<ModelConnection> {
+    const res = await request<ApiModelConnection>(
+      `/v1/models/${encodeURIComponent(modelId)}/revoke`,
+      { method: "POST" }
+    );
+    return {
+      id: res.id,
+      provider: displayProvider(res.provider),
+      modelName: res.model_name,
+      tokenName: res.token_name ?? undefined,
+      status: (res.status as ModelConnection["status"]),
+      createdAt: res.created_at,
+      usageCount: res.usage_count,
+      maskedKey: res.masked_key || "vz_live_...",
+      lastUsedAt: res.last_used_at ?? undefined,
+      metadata: res.metadata || undefined,
+    };
+  },
+
+  async rotateModel(modelId: string): Promise<ModelConnectionCreated> {
+    const res = await request<ApiModelConnectionCreated>(
+      `/v1/models/${encodeURIComponent(modelId)}/rotate`,
+      { method: "POST" }
+    );
+    return {
+      id: res.model_connection.id,
+      provider: displayProvider(res.model_connection.provider),
+      modelName: res.model_connection.model_name,
+      tokenName: res.model_connection.token_name ?? undefined,
+      status: (res.model_connection.status as ModelConnection["status"]),
+      createdAt: res.model_connection.created_at,
+      usageCount: res.model_connection.usage_count,
+      maskedKey: res.model_connection.masked_key || "vz_live_...",
+      lastUsedAt: res.model_connection.last_used_at ?? undefined,
+      metadata: res.model_connection.metadata || undefined,
+      apiKey: res.api_key,
     };
   },
 
