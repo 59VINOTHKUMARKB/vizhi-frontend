@@ -16,7 +16,8 @@ import {
   Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { clearSession, getStoredUser, isAuthenticated, type AuthUser } from "@/lib/auth";
+import { api } from "@/lib/api/client";
+import { clearSession, getStoredUser, isAuthenticated, setCurrentUser, type AuthUser } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -32,17 +33,31 @@ const navItems = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [user] = useState<AuthUser | null>(() => getStoredUser());
+  const [user, setUser] = useState<AuthUser | null>(() => getStoredUser());
 
   useEffect(() => {
-    if (!isAuthenticated()) {
-      router.replace("/login");
-      return;
+    async function loadUser() {
+      if (user) return;
+      try {
+        const currentUser = await api.me();
+        setCurrentUser(currentUser);
+        setUser(currentUser);
+      } catch {
+        clearSession();
+        router.replace("/login");
+      }
     }
-  }, [router]);
+    loadUser();
+  }, [router, user]);
 
-  function logout() {
+  async function logout() {
+    try {
+      await api.logout();
+    } catch {
+      // ignore logout errors and clear local state anyway
+    }
     clearSession();
+    setUser(null);
     router.replace("/login");
   }
 
