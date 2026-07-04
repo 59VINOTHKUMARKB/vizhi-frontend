@@ -4,6 +4,7 @@ out
 dist
 coverage
 *.tsbuildinfo
+.venv
 .env
 .env*
 !.env.example
