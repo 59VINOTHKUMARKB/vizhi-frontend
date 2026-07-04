@@ -11,3 +11,20 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Database files
+*.db
+*.sqlite3
+
+# Optional: VSCode settings
+.vscode/
